@@ -1,0 +1,138 @@
+---
+title: "Linear models"
+output: github_document
+date: "2024-10-30"
+---
+
+## Getting Started! 
+
+In general, remember linear regression (lm) is for continuous variables and logistic regression (generalized linear model (glm)) is for categorial variables. 
+
+So I put a couple of packages into my library so I can do my work and the functions I want will work. The knitr used to specify information about graphics. I also used the theme_set to tell the code to make plots black and white and where to put the legend, respectively. Viridis is a color scheme and I told ggplot to use that palette. 
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(p8105.datasets)
+
+knitr::opts_chunk$set(
+  fig.width = 6, 
+  fig.asp = 0.6, 
+  out.width = "90%"
+)
+
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_colour_discrete = scale_color_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+
+set.seed(1)
+```
+
+## Import Data
+
+So we open this data set about NYC AirBnBs. You can always view the file first using `view(nyc_airbnb)`. We changed the rating from a scale of 10 to 1-5 by dividing each number in half. We renamed a column borough to neighborhood gorup. We removed Staten Island from borough column, and then we only output price, stars, borough, neighborhood and room type from the listed columns( the original doc had info about latitude and longitude etc.-- from here: https://p8105.com/dataset_airbnb.html) 
+
+```{r}
+data("nyc_airbnb")
+
+nyc_airbnb = 
+  nyc_airbnb |> 
+  mutate(stars = review_scores_location / 2) |> 
+  rename(
+    borough = neighbourhood_group,
+    neighborhood = neighbourhood) |> 
+  filter(borough != "Staten Island") |> 
+  select(price, stars, borough, neighborhood, room_type)
+
+nyc_airbnb
+```
+
+## Fit a model 
+
+Good! so now that we have our data set and the variables that matter, we can create a model for the variables of interest. Here I will create a model that considers how price relates to the rating and the borough where the airbnb is located. 
+
+```{r}
+nyc_airbnb %>% 
+  ggplot(aes( x= stars, y= price, color = borough)) +
+  geom_point()
+```
+
+Ok so no we know what the data looks like. We tell R to get the linear model equation, since the ratings, price etc are all continuous variables. We can set that function equal to fit.Note! The borough options are Bronx, Brooklyn, Manhattan, Queens, and I think it might be because Bronx is entered first, OR it could be alphabetical order, but the regression is comparing all other boroughs to Bronx.  
+
+```{r}
+fit = lm(price ~ stars + borough, data = nyc_airbnb)
+fit
+```
+
+Then we can also run the summary function to get more info like degrees of freedom. The F statistic also tells us about the overall goodness of fit. 
+
+```{r}
+summary(fit)
+```
+I can also pull out only the coefficient from the summary function 
+```{r}
+summary(fit)$coef
+```
+You can also use the broom package to get a more condensed description. I can see the p value for each variable. We know that the regression is using Bronx as a standard and comparing the other values to this. Thus, what the coefficient estimate means is that staying in brooklyn is 40 dollars more expensive relative to the bronx, manhattan is 90 etc. ALSO notice this tells you that queens is not significantly influencing the price-- its p value is 0.145!
+
+```{r}
+broom::tidy(fit)
+```
+Now usually, people are only interested in the estimate and p value--- there is a way to put that out directly. I'm telling it to only select the 2 columns I care about; then I'm telling it that when it looks in the term column above and sees something that starts (^) with borough, capitalize it, add a colon and add some space before the next character appears. 
+
+```{r}
+broom::tidy(fit) %>% 
+  select(term, estimate, p.value) %>% 
+  mutate(term = str_replace(term, "^borough", "Borough: "))
+```
+Then if we wanted to see this in an actual table, we can use the `kable()` function that's used in r markdown files. Remember the knitr function is about displaying data. I can display the entire estimate and P values, or I can say hey I'm only interested in the first 3 decimals for both the estimate and p.value.
+
+```{r}
+broom::tidy(fit) %>% 
+  select(term, estimate, p.value) %>% 
+  mutate(term = str_replace(term, "^borough", "Borough: ")) %>% 
+knitr::kable(digits =3)
+```
+
+Remember the `factor` function? Factor takes a string and attaches a numeric value to it based on its position. 
+
+## How to change the reference category for your covariates!
+
+Recall, I mentioned that the Bronx was automatically set as the reference category. And that's because the linear model by default, treats the variables not as characters but factors, meaning it takes a character and attaches a numeric value to it based on its position. So it uses whatever is first as the reference. 
+
+Well! I can decide which variable should be the reference. 
+
+
+## First, Let's say I want the reference column to be the most frequent borough
+
+Here I take the nyc_airbnb modified data set from above and tell it to organize the borough column by which borough is more frequent, and also to reorder the room type by which is more frequent. So that the most frequent borough appears first. And that's what we see in the plot below.
+
+```{r}
+nyc_airbnb = 
+nyc_airbnb %>% 
+  mutate(
+    borough = fct_infreq(borough),
+    room_type = fct_infreq(room_type))
+```
+
+Now let's see what it did to the data using the plot
+```{r}
+nyc_airbnb %>% 
+  ggplot(aes( x= stars, y= price, color = borough)) +
+  geom_point()
+```
+## Now I rereun the regression
+
+I've already defined how borough should be analyzed. So note code earlier in this segment must be run prior to this for it to work. See now I have Bronx listed as a variable, and as expected, Bronx will be 90 dollars cheaper relative to Manhattan (the opposite of what we saw above). 
+
+```{r}
+fit = lm(price ~ stars + borough, data = nyc_airbnb)
+
+broom::tidy(fit)
+```
+
