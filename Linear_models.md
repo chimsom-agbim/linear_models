@@ -243,7 +243,7 @@ nyc_airbnb %>%
     ## (`geom_point()`).
 
 <img src="Linear_models_files/figure-gfm/unnamed-chunk-10-1.png" width="90%" />
-\## Now I rereun the regression
+Now I rereun the regression.
 
 I’ve already defined how borough should be analyzed. So note code
 earlier in this segment must be run prior to this for it to work. See
@@ -265,3 +265,27 @@ broom::tidy(fit)
     ## 3 boroughBrooklyn    -49.8      2.23    -22.3  6.32e-109
     ## 4 boroughQueens      -77.0      3.73    -20.7  2.58e- 94
     ## 5 boroughBronx       -90.3      8.57    -10.5  6.64e- 26
+
+## Diagnostics: starting with looking at residuals.
+
+I use the `add_residuals` function in the modelr package to add a column
+of the residuals to my condensed data frame, fit. The residual tells you
+the difference between your value of interest (let’s say price) and
+where it is relative to what your model would predict. So it shows that
+the 99\$ private room in the Bronx is about 9 dollars more expensive
+than my model predicts.
+
+It’s good to look at residuals because that gives us an idea as to how
+well the model fits the data and if there are outliers. The taller the
+line, the more outliers there are.
+
+``` r
+nyc_airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x = borough, y = resid)) + geom_violin()
+```
+
+    ## Warning: Removed 9962 rows containing non-finite outside the scale range
+    ## (`stat_ydensity()`).
+
+<img src="Linear_models_files/figure-gfm/unnamed-chunk-12-1.png" width="90%" />
