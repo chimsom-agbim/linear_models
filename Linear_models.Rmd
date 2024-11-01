@@ -10,7 +10,7 @@ In general, remember linear regression (lm) is for continuous variables and logi
 
 So I put a couple of packages into my library so I can do my work and the functions I want will work. The knitr used to specify information about graphics. I also used the theme_set to tell the code to make plots black and white and where to put the legend, respectively. Viridis is a color scheme and I told ggplot to use that palette. 
 
-```{r setup, include=FALSE}
+```{r setup}
 library(tidyverse)
 library(p8105.datasets)
 
