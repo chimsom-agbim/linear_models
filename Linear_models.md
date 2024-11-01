@@ -277,15 +277,263 @@ than my model predicts.
 
 It’s good to look at residuals because that gives us an idea as to how
 well the model fits the data and if there are outliers. The taller the
-line, the more outliers there are.
+line/size of the squiggly space (maybe?), the more outliers there are. I
+reset the limits of the y axis for better visualization.
 
 ``` r
 nyc_airbnb %>% 
   modelr::add_residuals(fit) %>% 
-  ggplot(aes(x = borough, y = resid)) + geom_violin()
+  ggplot(aes(x = borough, y = resid)) + geom_violin() +
+  ylim(-500,1500)
 ```
 
-    ## Warning: Removed 9962 rows containing non-finite outside the scale range
+    ## Warning: Removed 9993 rows containing non-finite outside the scale range
     ## (`stat_ydensity()`).
 
 <img src="Linear_models_files/figure-gfm/unnamed-chunk-12-1.png" width="90%" />
+
+I can also plot the residuals for each borough and have a better idea of
+where the model might be failing some values— you want to see where
+majority of values are– that means they are well represented by the
+model. For values that are somewhat outliers, like there are a lot in
+manhattan, see the extra data points further away.I’m telling it to plot
+each borough separately (using the facet function– I think it means all
+rows) and plot the residuals for each star rating
+
+``` r
+nyc_airbnb |> 
+  modelr::add_residuals(fit) |> 
+  ggplot(aes(x = stars, y = resid)) + geom_point() +
+  facet_wrap(. ~borough)
+```
+
+    ## Warning: Removed 9962 rows containing missing values or values outside the scale range
+    ## (`geom_point()`).
+
+<img src="Linear_models_files/figure-gfm/unnamed-chunk-13-1.png" width="90%" />
+
+\##Comparing models
+
+So it’s important to be sure that your complex model is complex because
+it represents the data well and is better than a simpler model (with
+fewer indepdent variables). The standard for comparing models is using
+an anova test. The original linear model
+(`fit = lm(price ~ stars + borough, data = nyc_airbnb)` ) looked at
+stars and borough as the independent variables. But let’s say my null
+hypothesis is borough doesn’t have an influence. The P value is get from
+the anova will tell you if there’s a significant difference in the more
+complex plot you have, and if so, that means accounting for those extra
+variables DOES make a difference in how well the model estimates the
+effects. It’s a little hard to understand/read at first, so I can add
+the `broom:: tidy()` function to improve readability.
+
+``` r
+fit_null = lm(price ~ stars, data = nyc_airbnb)
+fit_alt = lm(price ~ stars + borough, data = nyc_airbnb)
+anova(fit_null, fit_alt) %>% 
+  broom:: tidy()
+```
+
+    ## # A tibble: 2 × 7
+    ##   term                    df.residual     rss    df   sumsq statistic    p.value
+    ##   <chr>                         <dbl>   <dbl> <dbl>   <dbl>     <dbl>      <dbl>
+    ## 1 price ~ stars                 30528  1.03e9    NA NA            NA  NA        
+    ## 2 price ~ stars + borough       30525  1.01e9     3  2.53e7      256.  7.84e-164
+
+## How to create models that further stratify an indepedent variable of interest using nested data
+
+So this is important because let’s say I want to know not only whether
+star rating influences price, but what if it’s star rating within in
+each borough. I can tell the code to consider the interaction of stars
+and borough (and in stats means multiply). Importantly you can see p
+values for each interaction.
+
+``` r
+fit = lm(price ~ stars* borough + room_type * borough, data = nyc_airbnb) 
+
+broom:: tidy(fit)
+```
+
+    ## # A tibble: 16 × 5
+    ##    term                                  estimate std.error statistic  p.value
+    ##    <chr>                                    <dbl>     <dbl>     <dbl>    <dbl>
+    ##  1 (Intercept)                              95.7      19.2     4.99   6.13e- 7
+    ##  2 stars                                    27.1       3.96    6.84   8.20e-12
+    ##  3 boroughBrooklyn                         -26.1      25.1    -1.04   2.99e- 1
+    ##  4 boroughQueens                            -4.12     40.7    -0.101  9.19e- 1
+    ##  5 boroughBronx                             -5.63     77.8    -0.0723 9.42e- 1
+    ##  6 room_typePrivate room                  -124.        3.00  -41.5    0       
+    ##  7 room_typeShared room                   -154.        8.69  -17.7    1.42e-69
+    ##  8 stars:boroughBrooklyn                    -6.14      5.24   -1.17   2.41e- 1
+    ##  9 stars:boroughQueens                     -17.5       8.54   -2.04   4.09e- 2
+    ## 10 stars:boroughBronx                      -22.7      17.1    -1.33   1.85e- 1
+    ## 11 boroughBrooklyn:room_typePrivate room    32.0       4.33    7.39   1.55e-13
+    ## 12 boroughQueens:room_typePrivate room      54.9       7.46    7.37   1.81e-13
+    ## 13 boroughBronx:room_typePrivate room       71.3      18.0     3.96   7.54e- 5
+    ## 14 boroughBrooklyn:room_typeShared room     47.8      13.9     3.44   5.83e- 4
+    ## 15 boroughQueens:room_typeShared room       58.7      17.9     3.28   1.05e- 3
+    ## 16 boroughBronx:room_typeShared room        83.1      42.5     1.96   5.03e- 2
+
+## Nesting data
+
+So I’m telling it to take this data and form a list of data frames.
+Truly not quite sure what this code is doing in terms of the -borough bc
+that means exclude borough.
+
+``` r
+nyc_airbnb %>% 
+  nest(data = -borough)
+```
+
+    ## # A tibble: 4 × 2
+    ##   borough   data                 
+    ##   <fct>     <list>               
+    ## 1 Bronx     <tibble [649 × 4]>   
+    ## 2 Queens    <tibble [3,821 × 4]> 
+    ## 3 Brooklyn  <tibble [16,810 × 4]>
+    ## 4 Manhattan <tibble [19,212 × 4]>
+
+Now I’m going to create a model for each borough. Again, not quite sure
+what syntax needs are for the map function. Data refers to the data
+column.
+
+``` r
+nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars, data = .x))
+  ) 
+```
+
+    ## # A tibble: 4 × 3
+    ##   borough   data                  models
+    ##   <fct>     <list>                <list>
+    ## 1 Bronx     <tibble [649 × 4]>    <lm>  
+    ## 2 Queens    <tibble [3,821 × 4]>  <lm>  
+    ## 3 Brooklyn  <tibble [16,810 × 4]> <lm>  
+    ## 4 Manhattan <tibble [19,212 × 4]> <lm>
+
+I can pull out the models column to see the coefficients. The map
+function takes an input (.x = the information of interest, which is
+data, then applies a function to elements in the list, which in this
+case is the linear model, and returns an object of the same length as
+the input, which is what I think data =.x does).
+
+``` r
+nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars, data = .x))
+  ) %>% 
+  pull(models)
+```
+
+    ## [[1]]
+    ## 
+    ## Call:
+    ## lm(formula = price ~ stars, data = .x)
+    ## 
+    ## Coefficients:
+    ## (Intercept)        stars  
+    ##      49.925        4.913  
+    ## 
+    ## 
+    ## [[2]]
+    ## 
+    ## Call:
+    ## lm(formula = price ~ stars, data = .x)
+    ## 
+    ## Coefficients:
+    ## (Intercept)        stars  
+    ##        18.1         15.8  
+    ## 
+    ## 
+    ## [[3]]
+    ## 
+    ## Call:
+    ## lm(formula = price ~ stars, data = .x)
+    ## 
+    ## Coefficients:
+    ## (Intercept)        stars  
+    ##      -11.35        27.99  
+    ## 
+    ## 
+    ## [[4]]
+    ## 
+    ## Call:
+    ## lm(formula = price ~ stars, data = .x)
+    ## 
+    ## Coefficients:
+    ## (Intercept)        stars  
+    ##       -34.3         43.3
+
+I can apply the tiny data and add a results column of the broom tidy
+function that provides the stats we care about.
+
+``` r
+stats_of_interest = nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars, data = .x)),
+    results = map(models, broom::tidy)
+  )
+stats_of_interest
+```
+
+    ## # A tibble: 4 × 4
+    ##   borough   data                  models results         
+    ##   <fct>     <list>                <list> <list>          
+    ## 1 Bronx     <tibble [649 × 4]>    <lm>   <tibble [2 × 5]>
+    ## 2 Queens    <tibble [3,821 × 4]>  <lm>   <tibble [2 × 5]>
+    ## 3 Brooklyn  <tibble [16,810 × 4]> <lm>   <tibble [2 × 5]>
+    ## 4 Manhattan <tibble [19,212 × 4]> <lm>   <tibble [2 × 5]>
+
+Now I can unnest it to show me columns and rows. I removed the stars
+columns
+
+``` r
+stats_of_interest = nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+   select(-data, -models) %>% 
+  unnest(results)
+stats_of_interest
+```
+
+    ## # A tibble: 8 × 6
+    ##   borough   term        estimate std.error statistic  p.value
+    ##   <fct>     <chr>          <dbl>     <dbl>     <dbl>    <dbl>
+    ## 1 Bronx     (Intercept)    49.9      18.3      2.72  6.71e- 3
+    ## 2 Bronx     stars           4.91      4.10     1.20  2.31e- 1
+    ## 3 Queens    (Intercept)    18.1      26.3      0.688 4.92e- 1
+    ## 4 Queens    stars          15.8       5.63     2.81  5.06e- 3
+    ## 5 Brooklyn  (Intercept)   -11.3      14.5     -0.784 4.33e- 1
+    ## 6 Brooklyn  stars          28.0       3.10     9.02  2.13e-19
+    ## 7 Manhattan (Intercept)   -34.3      22.9     -1.50  1.35e- 1
+    ## 8 Manhattan stars          43.3       4.78     9.07  1.39e-19
+
+I can remove the stars column.
+
+``` r
+stats_of_interest = nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+   select(-data, -models) %>% 
+  unnest(results) %>% 
+ filter(term == "stars")
+stats_of_interest
+```
+
+    ## # A tibble: 4 × 6
+    ##   borough   term  estimate std.error statistic  p.value
+    ##   <fct>     <chr>    <dbl>     <dbl>     <dbl>    <dbl>
+    ## 1 Bronx     stars     4.91      4.10      1.20 2.31e- 1
+    ## 2 Queens    stars    15.8       5.63      2.81 5.06e- 3
+    ## 3 Brooklyn  stars    28.0       3.10      9.02 2.13e-19
+    ## 4 Manhattan stars    43.3       4.78      9.07 1.39e-19

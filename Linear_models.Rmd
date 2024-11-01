@@ -140,11 +140,118 @@ broom::tidy(fit)
 I use the `add_residuals` function in the modelr package to add a column of the residuals to my condensed data frame, fit. 
 The residual tells you the difference between your value of interest (let's say price) and where it is relative to what your model would predict. So it shows that the 99$ private room in the Bronx is about 9 dollars more expensive than my model predicts. 
 
-It's good to look at residuals because that gives us an idea as to how well the model fits the data and if there are outliers. The taller the line, the more outliers there are. 
+It's good to look at residuals because that gives us an idea as to how well the model fits the data and if there are outliers. The taller the line/size of the squiggly space (maybe?), the more outliers there are. I reset the limits of the y axis for better visualization. 
 
 ```{r}
 nyc_airbnb %>% 
   modelr::add_residuals(fit) %>% 
-  ggplot(aes(x = borough, y = resid)) + geom_violin()
+  ggplot(aes(x = borough, y = resid)) + geom_violin() +
+  ylim(-500,1500)
+
+
 ```
+
+I can also plot the residuals for each borough and have a better idea of where the model might be failing some values--- you want to see where majority of values are-- that means they are well represented by the model. For values that are somewhat outliers, like there are a lot in manhattan, see the extra data points further away.I'm telling it to plot each borough separately (using the facet function-- I think it means all rows) and plot the residuals for each star rating 
+
+```{r}
+nyc_airbnb |> 
+  modelr::add_residuals(fit) |> 
+  ggplot(aes(x = stars, y = resid)) + geom_point() +
+  facet_wrap(. ~borough)
+```
+
+##Comparing models
+
+So it's important to be sure that your complex model is complex because it represents the data well and is better than a simpler model (with fewer indepdent variables). The standard for comparing models is using an anova test. The original linear model (`fit = lm(price ~ stars + borough, data = nyc_airbnb)` ) looked at stars and borough as the independent variables. But let's say my null hypothesis is borough doesn't have an influence. The P value is get from the anova will tell you if there's a significant difference in the more complex plot you have, and if so, that means accounting for those extra variables DOES make a difference in how well the model estimates the effects. 
+It's a little hard to understand/read at first, so I can add the `broom:: tidy()` function to improve readability. 
+
+```{r}
+fit_null = lm(price ~ stars, data = nyc_airbnb)
+fit_alt = lm(price ~ stars + borough, data = nyc_airbnb)
+anova(fit_null, fit_alt) %>% 
+  broom:: tidy()
+```
+
+## How to create models that further stratify an indepedent variable of interest using nested data 
+
+So this is important because let's say I want to know not only whether star rating influences price, but what if it's star rating within in each borough. I can tell the code to consider the interaction of stars and borough (and in stats means multiply). Importantly you can see p values for each interaction. 
+
+```{r}
+fit = lm(price ~ stars* borough + room_type * borough, data = nyc_airbnb) 
+
+broom:: tidy(fit)
+```
+
+## Nesting data 
+
+So I'm telling it to take this data and form a list of data frames. Truly not quite sure what this code is doing in terms of the -borough bc that means exclude borough. 
+
+```{r}
+nyc_airbnb %>% 
+  nest(data = -borough)
+
+```
+
+Now I'm going to create a model for each borough. Again, not quite sure what syntax needs are for the map function. Data refers to the data column.
+
+```{r}
+nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars, data = .x))
+  ) 
+```
+
+I can pull out the models column to see the coefficients. The map function takes an input (.x = the information of interest, which is data, then applies a function to elements in the list, which in this case is the linear model, and returns an object of the same length as the input, which is what I think data =.x does).
+
+```{r}
+nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars, data = .x))
+  ) %>% 
+  pull(models)
+```
+
+I can apply the tiny data and add a results column of the broom tidy function that provides the stats we care about. 
+
+```{r}
+stats_of_interest = nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars, data = .x)),
+    results = map(models, broom::tidy)
+  )
+stats_of_interest
+```
+
+Now I can unnest it to show me columns and rows. I removed the stars columns
+
+```{r}
+stats_of_interest = nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+   select(-data, -models) %>% 
+  unnest(results)
+stats_of_interest
+```
+
+I can remove the stars column. 
+
+```{r}
+stats_of_interest = nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    models = map(.x = data, ~lm(price ~ stars, data = .x)),
+    results = map(models, broom::tidy)
+  ) %>% 
+   select(-data, -models) %>% 
+  unnest(results) %>% 
+ filter(term == "stars")
+stats_of_interest
+```
+
 
